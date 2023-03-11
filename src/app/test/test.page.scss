@@ -1,0 +1,14 @@
+ion-col {
+  border: solid 1px var(--ion-color-dark);
+  text-align: center;
+}
+
+.header-row {
+  border: 3px solid  var(--ion-color-dark);
+}
+
+.location-progress-column {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}

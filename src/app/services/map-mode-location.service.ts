@@ -5,38 +5,82 @@ import {BehaviorSubject, from, map, Observable, ObservedValueOf, Subject, throwE
 import { SQLiteService } from './sqlite.service';
 import { DbnameVersionService } from './dbname-version.service';
 import { environment } from 'src/environments/environment';
-import {mapModeLocationVersionUpgrades} from '../upgrades/upgrade-statements';
 import {DB_MAPS} from '../data/maps';
 import {DB_MODES} from '../data/modes';
 
-import {DB_MODE} from '../data/DB_MODE';
-import {DB_MAP} from '../data/DB_MAP';
-
-import { IdsSeq } from '../models/ids-seq';
-import {DB_LOCATION} from '../data/DB_LOCATION';
 import {DB_LOCATIONS} from '../data/locations';
 import {LocationKey, ModeKey} from '../types/composite-keys';
-import {MY_UTIL} from '../MY_UTIL';
+import {DB_MAP} from '../types/DB_MAP';
+import {DB_MODE} from '../types/DB_MODE';
+import {DB_LOCATION} from '../types/DB_LOCATION';
+import {mapModeLocationVersionUpgrades} from '../upgrade-statement';
 
 @Injectable()
 export class MapModeLocationService {
   public databaseName: string;
-  public mapList$: BehaviorSubject<DB_MAP[]> = new BehaviorSubject<DB_MAP[]>([]);
-  public modeList$: BehaviorSubject<DB_MODE[]> = new BehaviorSubject<DB_MODE[]>([]);
-  public locationList$: BehaviorSubject<DB_LOCATION[]> = new BehaviorSubject<DB_LOCATION[]>([]);
-  public idsSeqList$: BehaviorSubject<IdsSeq[]> = new BehaviorSubject<IdsSeq[]>([]);
-  public currentLocation$: Subject<DB_LOCATION> = new Subject();
-
-  private isModeReady$: BehaviorSubject<boolean> = new BehaviorSubject(false);
-  private isMapReady$: BehaviorSubject<boolean> = new BehaviorSubject(false);
-  private isLocationReady$: BehaviorSubject<boolean> = new BehaviorSubject(false);
-  private isIdsSeqReady$: BehaviorSubject<boolean> = new BehaviorSubject(false);
   private versionUpgrades = mapModeLocationVersionUpgrades;
   private loadToVersion = mapModeLocationVersionUpgrades[mapModeLocationVersionUpgrades.length-1].toVersion;
   private mDb!: SQLiteDBConnection;
 
   constructor(private sqliteService: SQLiteService, private dbVerService: DbnameVersionService) {
     this.databaseName = environment.databaseNames[0].name; // for multiple dbs: .filter(x => x.name.includes('modes'))
+  }
+
+  public getAllLocations1(): Observable<DB_LOCATION[]> {
+    const stmt = `select * from location`;
+    const valuesWrapper$: Observable<DBSQLiteValues> = from(this.mDb.query(stmt)); // todo: type correct?
+    return valuesWrapper$.pipe(map(valuesWrapper => {
+      const rawJsonObjs: any[] = valuesWrapper.values!;
+      const locations: DB_LOCATION[] = [];
+      for (const jsonObj of rawJsonObjs) {
+        if (jsonObj.progress === undefined) console.error('Assertion failed: progress should only be undefined onCreate.');
+        const location = new DB_LOCATION();
+        location.mapId = jsonObj.mapId;
+        location.modeId = jsonObj.modeId;
+        location.locationId = jsonObj.locationId;
+        location.progress = jsonObj.progress;
+        location.name = jsonObj.name;
+        locations.push(location);
+      }
+      return locations;
+    }));
+  }
+
+  public getAllModes1(): Observable<DB_MODE[]> {
+    const stmt = `select * from mode`;
+    const valuesWrapper$: Observable<DBSQLiteValues> = from(this.mDb.query(stmt)); // todo: type correct?
+    return valuesWrapper$.pipe(map(valuesWrapper => {
+      const rawJsonObjs: any[] = valuesWrapper.values!;
+      const modes: DB_MODE[] = [];
+      for (const jsonObj of rawJsonObjs) {
+        if (jsonObj.progress === undefined) console.error('Assertion failed: progress should only be undefined onCreate.');
+        const mode = new DB_MODE();
+        mode.mapId = jsonObj.mapId;
+        mode.modeId = jsonObj.modeId;
+        mode.progress = jsonObj.progress;
+        mode.name = jsonObj.name;
+        modes.push(mode);
+      }
+      return modes;
+    }));
+  }
+
+  public getAllMaps1(): Observable<DB_MAP[]> {
+    const stmt = `select * from map`;
+    const valuesWrapper$: Observable<DBSQLiteValues> = from(this.mDb.query(stmt)); // todo: type correct?
+    return valuesWrapper$.pipe(map(valuesWrapper => {
+      const rawJsonObjs: any[] = valuesWrapper.values!;
+      const maps: DB_MAP[] = [];
+      for (const jsonObj of rawJsonObjs) {
+        if (jsonObj.progress === undefined) console.error('Assertion failed: progress should only be undefined onCreate.');
+        const map = new DB_MAP();
+        map.mapId = jsonObj.mapId;
+        map.progress = jsonObj.progress;
+        map.name = jsonObj.name;
+        maps.push(map);
+      }
+      return maps;
+    }));
   }
 
   async initializeDatabase() {
@@ -55,87 +99,12 @@ export class MapModeLocationService {
     if( this.sqliteService.platform === 'web') {
       await this.sqliteService.sqliteConnection.saveToStore(this.databaseName);
     }
-    await this.saveOrUpdateAllData();
   }
+
   async openDatabase() {
     this.mDb = await this.sqliteService
       .openDatabase(this.databaseName, false, "no-encryption",
         this.loadToVersion,false);
-  }
-  async saveOrUpdateAllData(): Promise<void> {
-    await this.getAllMaps();
-    this.isMapReady$.next(true); //NOTE: I changed order. Might cause bugs... probably not since no db interaction
-    await this.getAllModes();
-    this.isModeReady$.next(true);
-    await this.getAllLocations();
-    this.isLocationReady$.next(true);
-    await this.getAllIdsSeq();
-    this.isIdsSeqReady$.next(true);
-  }
-
-  /**
-   * Return Mode state
-   * @returns
-   */
-  modeState(): Observable<boolean> {
-    return this.isModeReady$.asObservable();
-  }
-  /**
-   * Return Map state
-   * @returns
-   */
-  mapState(): Observable<boolean> {
-    return this.isMapReady$.asObservable();
-  }
-  /**
-   * Return Ids Sequence state
-   * @returns
-   */
-  idsSeqState(): Observable<boolean> {
-    return this.isIdsSeqReady$.asObservable();
-  }
-
-  /**
-   * Fetch Modes
-   * @returns
-   */
-  fetchModes(): Observable<DB_MODE[]> {
-    return this.modeList$.asObservable();
-  }
-  /**
-   * Fetch Maps
-   * @returns
-   */
-  fetchMaps(): Observable<DB_MAP[]> {
-    return this.mapList$.asObservable();
-  }
-  /**
-   * Fetch Ids Sequence
-   * @returns
-   */
-  fetchIdsSeq(): Observable<IdsSeq[]> {
-    return this.idsSeqList$.asObservable();
-  }
-
-  /**
-   * @param currentLocationKey Based on this getNewDifferentRandomLocation from all locations of this mode
-   */
-  public async getNewDifferentRandomLocation(currentLocationKey: LocationKey): Promise<void> {
-    const newLocations: DB_LOCATION[] = (await this.mDb.query(`
-      SELECT * FROM Location
-      WHERE
-        Location.locationId != ${currentLocationKey.locationId}
-        AND Location.mapId = ${currentLocationKey.mapId}
-        AND Location.modeId = ${currentLocationKey.modeId}
-      ORDER BY
-        CASE WHEN Location.progress < 7 THEN 1 ELSE 0 END DESC,
-        RANDOM()
-      LIMIT 1;
-    `)).values as DB_LOCATION[];
-    if (newLocations.length !== 1) {
-      console.error('Query failed');
-    }
-    this.currentLocation$.next(newLocations[0]);
   }
 
   /**
@@ -181,51 +150,6 @@ export class MapModeLocationService {
     }
   }
 
-  /**
-   * Get all Maps
-   * @returns
-   */
-  async getAllMaps(): Promise<void> {
-    const maps: DB_MAP[] = (await this.mDb.query("select * from map")).values as DB_MAP[];
-    this.mapList$.next(maps);
-  }
-
-  public getMap(mapId: number): Observable<DB_MAP> {
-    const stmt = `select * from map WHERE ${MY_UTIL.getWhereConditions({mapId})}`;
-    const valuesWrapper$: Observable<DBSQLiteValues> = from(this.mDb.query(stmt)); // todo: type correct?
-    return valuesWrapper$.pipe(map(valuesWrapper => {
-      const rawJsonObjs: any[] = valuesWrapper.values!;
-      const maps: DB_MAP[] = [];
-      for (const jsonObj of rawJsonObjs) {
-        if (jsonObj.progress === undefined) console.error('Assertion failed: progress should only be undefined onCreate.');
-        const map = new DB_MAP();
-        map.mapId = jsonObj.mapId;
-        map.progress = jsonObj.progress;
-        map.name = jsonObj.name;
-        maps.push(map);
-      }
-      if (maps.length !== 1) console.error('Assertion failed');
-      return maps[0];
-    }));
-  }
-
-  public getAllMaps1(): Observable<DB_MAP[]> {
-    const stmt = `select * from map`;
-    const valuesWrapper$: Observable<DBSQLiteValues> = from(this.mDb.query(stmt)); // todo: type correct?
-    return valuesWrapper$.pipe(map(valuesWrapper => {
-      const rawJsonObjs: any[] = valuesWrapper.values!;
-      const maps: DB_MAP[] = [];
-      for (const jsonObj of rawJsonObjs) {
-        if (jsonObj.progress === undefined) console.error('Assertion failed: progress should only be undefined onCreate.');
-        const map = new DB_MAP();
-        map.mapId = jsonObj.mapId;
-        map.progress = jsonObj.progress;
-        map.name = jsonObj.name;
-        maps.push(map);
-      }
-      return maps;
-    }));
-  }
 
   /**
    * Get, Create, Update an Mode
@@ -262,83 +186,6 @@ export class MapModeLocationService {
         return retMode;
       }
     }
-  }
-
-  /**
-   * Get all Modes
-   * @returns
-   */
-  async getAllModes(): Promise<void> {
-    // Query the mode table
-    const stmt = `select * from mode`;
-    const modes = (await this.mDb.query(stmt)).values;
-    const modesData: DB_MODE[] = [];
-    for (const mode of modes!) {
-      const modeData = new DB_MODE();
-      modeData.modeId = mode.modeId;
-      modeData.mapId = mode.mapId; // TODO: this will be used for complex object mappings
-      modeData.name = mode.name;
-      modesData.push(modeData);
-    }
-    this.modeList$.next(modesData);
-  }
-
-  public getMode(modeKey: ModeKey): Observable<DB_MODE> {
-    const stmt = `select * from mode WHERE ${MY_UTIL.getWhereConditions(modeKey)}`;
-    const valuesWrapper$: Observable<DBSQLiteValues> = from(this.mDb.query(stmt)); // todo: type correct?
-    return valuesWrapper$.pipe(map(valuesWrapper => {
-      const rawJsonObjs: any[] = valuesWrapper.values!;
-      const modes: DB_MODE[] = [];
-      for (const jsonObj of rawJsonObjs) {
-        if (jsonObj.progress === undefined) console.error('Assertion failed: progress should only be undefined onCreate.');
-        const mode = new DB_MODE();
-        mode.mapId = jsonObj.mapId;
-        mode.modeId = jsonObj.modeId;
-        mode.progress = jsonObj.progress;
-        mode.name = jsonObj.name;
-        modes.push(mode);
-      }
-      if (modes.length !== 1) console.error('Assertion failed');
-      return modes[0];
-    }));
-  }
-
-  public getModesOfMap(mapId: number): Observable<DB_MAP[]> {
-    const stmt = `select * from mode WHERE ${MY_UTIL.getWhereConditions({mapId})}`;
-    const valuesWrapper$: Observable<DBSQLiteValues> = from(this.mDb.query(stmt)); // todo: type correct?
-    return valuesWrapper$.pipe(map(valuesWrapper => {
-      const rawJsonObjs: any[] = valuesWrapper.values!;
-      const modes: DB_MODE[] = [];
-      for (const jsonObj of rawJsonObjs) {
-        if (jsonObj.progress === undefined) console.error('Assertion failed: progress should only be undefined onCreate.');
-        const mode = new DB_MODE();
-        mode.mapId = jsonObj.mapId;
-        mode.modeId = jsonObj.modeId;
-        mode.progress = jsonObj.progress;
-        mode.name = jsonObj.name;
-        modes.push(mode);
-      }
-      return modes;
-    }));
-  }
-
-  public getAllModes1(): Observable<DB_MODE[]> {
-    const stmt = `select * from mode`;
-    const valuesWrapper$: Observable<DBSQLiteValues> = from(this.mDb.query(stmt)); // todo: type correct?
-    return valuesWrapper$.pipe(map(valuesWrapper => {
-      const rawJsonObjs: any[] = valuesWrapper.values!;
-      const modes: DB_MODE[] = [];
-      for (const jsonObj of rawJsonObjs) {
-        if (jsonObj.progress === undefined) console.error('Assertion failed: progress should only be undefined onCreate.');
-        const mode = new DB_MODE();
-        mode.mapId = jsonObj.mapId;
-        mode.modeId = jsonObj.modeId;
-        mode.progress = jsonObj.progress;
-        mode.name = jsonObj.name;
-        modes.push(mode);
-      }
-      return modes;
-    }));
   }
 
   /**
@@ -403,153 +250,7 @@ export class MapModeLocationService {
     return from(this.mDb.run(stmt, [])); // the only value of values is the one that has a '?' in the statement
   }
 
-  /**
-   * Resets the progress for the mode that matches the modeKey
-   * @param modeKey
-   */
-  public resetProgress(modeKey: ModeKey): Observable<ObservedValueOf<Promise<capSQLiteChanges>>> {
-    try {
-      return from(this.mDb.run(`
-        UPDATE location
-        SET progress = 0
-        WHERE mapId = ${modeKey.mapId} AND modeId = ${modeKey.modeId};
 
-        UPDATE mode -- TODO: make this be inside a separate query? And/or: make it all be a transaction? Since it's multiple statements...
-        SET progress = (
-          SELECT AVG(sumProgress) FROM (
-            SELECT SUM(progress/${MY_UTIL.maxProgress}) as sumProgress
-            FROM location
-            WHERE mapId = ${modeKey.mapId} AND modeId = ${modeKey.modeId}
-            GROUP BY mapId, modeId, locationId
-          ) as subquery
-        )
-        WHERE modeId = ${modeKey.modeId};
-
-        UPDATE map
-        SET progress = (
-          SELECT AVG(sumProgress) FROM (
-            SELECT SUM(progress) as sumProgress
-            FROM mode
-            WHERE mapId = ${modeKey.mapId}
-            GROUP BY mapId, modeId
-          ) as subquery
-        )
-        WHERE mapId = ${modeKey.mapId};
-        `
-      ));
-      /* // TODO at some point:
-      if(ret.changes!.changes != 1) {
-        return Promise.reject(`save: insert changes != 1`);
-      }
-      */
-    } catch (error: any) {
-      console.error('error while updating progress');
-      return throwError(() => 'error while updating progress: ' + error.message);
-    }
-  }
-
-  /**
-   * Get all Locations
-   * @returns
-   */
-  async getAllLocations(): Promise<void> {
-    // Query the location table
-    const stmt = `select * from location`;
-    const rawLocations = (await this.mDb.query(stmt)).values;
-    const locations: DB_LOCATION[] = [];
-    for (const rawLocation of rawLocations!) {
-      const location = new DB_LOCATION();
-      location.mapId = rawLocation.mapId; // TODO: this will be used for complex object mappings
-      location.modeId = rawLocation.modeId;
-      location.locationId = rawLocation.locationId;
-      location.progress = rawLocation.progress;
-      location.name = rawLocation.name;
-      locations.push(location);
-    }
-    this.locationList$.next(locations);
-  }
-
-  public getLocationsOfMode(modeKey: ModeKey): Observable<DB_LOCATION[]> {
-    const stmt = `select * from location WHERE ${MY_UTIL.getWhereConditions(modeKey)}`;
-    const valuesWrapper$: Observable<DBSQLiteValues> = from(this.mDb.query(stmt)); // todo: type correct?
-    return valuesWrapper$.pipe(map(valuesWrapper => {
-      const rawJsonObjs: any[] = valuesWrapper.values!;
-      const locations: DB_LOCATION[] = [];
-      for (const jsonObj of rawJsonObjs) {
-        if (jsonObj.progress === undefined) console.error('Assertion failed: progress should only be undefined onCreate.');
-        const location = new DB_LOCATION();
-        location.mapId = jsonObj.mapId; // NOTE: this will be used for complex object mappings
-        location.modeId = jsonObj.modeId;
-        location.locationId = jsonObj.locationId;
-        location.progress = jsonObj.progress;
-        location.name = jsonObj.name;
-        locations.push(location);
-      }
-      return locations;
-    }));
-  }
-
-  public getLocation(locationKey: LocationKey): Observable<DB_LOCATION> {
-    const stmt = `select * from location WHERE ${MY_UTIL.getWhereConditions(locationKey)}`;
-    const valuesWrapper$: Observable<DBSQLiteValues> = from(this.mDb.query(stmt)); // todo: type correct?
-    return valuesWrapper$.pipe(map(valuesWrapper => {
-      const rawJsonObjs: any[] = valuesWrapper.values!;
-      const locations: DB_LOCATION[] = [];
-      for (const jsonObj of rawJsonObjs) {
-        if (jsonObj.progress === undefined) console.error('Assertion failed: progress should only be undefined onCreate.');
-        const location = new DB_LOCATION();
-        location.mapId = jsonObj.mapId;
-        location.modeId = jsonObj.modeId;
-        location.locationId = jsonObj.locationId;
-        location.progress = jsonObj.progress;
-        location.name = jsonObj.name;
-        locations.push(location);
-      }
-      if (locations.length !== 1) console.error('Assertion failed');
-      return locations[0];
-    }));
-  }
-
-  public getAllLocations1(): Observable<DB_LOCATION[]> {
-    const stmt = `select * from location`;
-    const valuesWrapper$: Observable<DBSQLiteValues> = from(this.mDb.query(stmt)); // todo: type correct?
-    return valuesWrapper$.pipe(map(valuesWrapper => {
-      const rawJsonObjs: any[] = valuesWrapper.values!;
-      const locations: DB_LOCATION[] = [];
-      for (const jsonObj of rawJsonObjs) {
-        if (jsonObj.progress === undefined) console.error('Assertion failed: progress should only be undefined onCreate.');
-        const location = new DB_LOCATION();
-        location.mapId = jsonObj.mapId;
-        location.modeId = jsonObj.modeId;
-        location.locationId = jsonObj.locationId;
-        location.progress = jsonObj.progress;
-        location.name = jsonObj.name;
-        locations.push(location);
-      }
-      return locations;
-    }));
-  }
-
-  /**
-   * Get
-   * all Ids Sequence
-   * @returns
-   */
-  async getAllIdsSeq(): Promise<void> {
-    const idsSeq: IdsSeq[] = (await this.mDb.query("select * from sqlite_sequence")).values as IdsSeq[];
-    this.idsSeqList$.next(idsSeq);
-  }
-  /**
-   * Get Mode from ModeData
-   * @param mode
-   * @returns
-   */
-  getModeFromModeData(mode: DB_MODE): DB_MODE {
-    const modeJson: DB_MODE = new DB_MODE();
-    modeJson.modeId = mode.modeId;
-    modeJson.mapId = mode.mapId; // todo: simplification mapping
-    return modeJson;
-  }
 
   /*********************
    * Private Functions *

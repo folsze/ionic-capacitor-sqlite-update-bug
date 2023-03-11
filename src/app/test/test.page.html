@@ -1,0 +1,75 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-title>test</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content>
+  <h1>Database console</h1>
+  <ion-button (click)="doSomething()">Do something</ion-button>
+  <h2>Map table</h2>
+  <ion-grid>
+    <ion-row class="header-row">
+      <ion-col>mapId</ion-col>
+      <ion-col>name</ion-col>
+      <ion-col>progress</ion-col>
+    </ion-row>
+    <ng-container *ngIf="(allMaps$ | async) as allMaps; else loadingSpinner">
+      <ion-row *ngFor="let map1 of allMaps">
+        <ion-col>{{map1.mapId}}</ion-col>
+        <ion-col>{{map1.name}}</ion-col>
+        <ion-col>{{map1.progress}}</ion-col>
+      </ion-row>
+    </ng-container>
+  </ion-grid>
+
+  <h2>Mode table</h2>
+  <ion-grid>
+    <ion-row class="header-row">
+      <ion-col>mapId</ion-col>
+      <ion-col>modeId</ion-col>
+      <ion-col>name</ion-col>
+      <ion-col>progress</ion-col>
+    </ion-row>
+    <ng-container *ngIf="(allModes$ | async) as allModes else loadingSpinner">
+      <ion-row *ngFor="let mode1 of allModes">
+        <ion-col>{{mode1.mapId}}</ion-col>
+        <ion-col>{{mode1.modeId}}</ion-col>
+        <ion-col>{{mode1.name}}</ion-col>
+        <ion-col>{{mode1.progress}}</ion-col>
+      </ion-row>
+    </ng-container>
+  </ion-grid>
+
+  <h2>Location table</h2>
+  <ion-grid>
+    <ion-row class="header-row">
+      <ion-col>mapId</ion-col>
+      <ion-col>modeId</ion-col>
+      <ion-col>locationId</ion-col>
+      <ion-col>name</ion-col>
+      <ion-col>progress</ion-col>
+    </ion-row>
+    <ng-container *ngIf="(allLocations$ | async) as allLocations; else loadingSpinner">
+      <ion-row *ngFor="let location1 of allLocations | slice:0:displayedLocationsCount">
+        <ion-col>{{location1.mapId}}</ion-col>
+        <ion-col>{{location1.modeId}}</ion-col>
+        <ion-col>{{location1.locationId}}</ion-col>
+        <ion-col>{{location1.name}}</ion-col>
+        <ion-col class="location-progress-column">
+          <ion-fab-button (click)="increaseProgress(location1)" class="minus-button" size="small">-</ion-fab-button>
+          {{location1.progress}}
+          <ion-fab-button (click)="decreaseProgress(location1)" color="success" size="small">+</ion-fab-button>
+        </ion-col>
+      </ion-row>
+      <ion-infinite-scroll (ionInfinite)="onIonInfinite($event)">
+        <ion-infinite-scroll-content ></ion-infinite-scroll-content>
+      </ion-infinite-scroll>
+    </ng-container>
+  </ion-grid>
+</ion-content>
+
+<!--probably works with a single loading spinner-->
+<ng-template #loadingSpinner>
+  <ion-spinner></ion-spinner>
+</ng-template>

@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 
 import { SQLiteService } from './sqlite.service';
 import { MapModeLocationService } from './map-mode-location.service';
-import { Toast } from '@capacitor/toast';
+import {Toast} from '@capacitor/toast';
 
 @Injectable()
 export class InitializeAppService {

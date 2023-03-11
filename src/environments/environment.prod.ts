@@ -1,3 +1,6 @@
 export const environment = {
-  production: true
+  production: true,
+  databaseNames:[
+    {name:"starter_geo_champ"},
+  ],
 };
